@@ -195,10 +195,9 @@
 
     <!-- SCRIPT ENGINE -->
     <script>
-        const ADMIN_CREDENTIALS = {
-            username: "admin",
-            password: "edl8password"
-        };
+        const ADMIN_CREDENTIALS = { username: "admin", password: "edl8password" };
+
+        const DATA_VERSION = 1001;
 
         const defaultPlayers = [
             { id: 1, name: "Ashman Titung" },
@@ -212,11 +211,6 @@
             { id: 9, name: "Remon Subedi" },
             { id: 10, name: "Namsang Subba" }
         ];
-
-        let players = JSON.parse(localStorage.getItem('EDL_S8_PLAYERS')) || defaultPlayers;
-        let matches = JSON.parse(localStorage.getItem('EDL_S8_MATCHES')) || generateRoundRobin(players);
-        let isAdminAuthenticated = sessionStorage.getItem('EDL_S8_AUTH') === 'true';
-        let isAdminEditingEnabled = JSON.parse(localStorage.getItem('EDL_S8_ADMIN_MODE')) || false;
 
         function generateRoundRobin(playerList) {
             let schedule = [];
@@ -236,6 +230,21 @@
             }
             return schedule;
         }
+
+        const defaultMatches = generateRoundRobin(defaultPlayers);
+
+        // DATA SYNC LOGIC
+        const localVersion = localStorage.getItem('EDL_S8_VERSION');
+        if (!localVersion || parseInt(localVersion) < DATA_VERSION) {
+            localStorage.setItem('EDL_S8_PLAYERS', JSON.stringify(defaultPlayers));
+            localStorage.setItem('EDL_S8_MATCHES', JSON.stringify(defaultMatches));
+            localStorage.setItem('EDL_S8_VERSION', DATA_VERSION.toString());
+        }
+
+        let players = JSON.parse(localStorage.getItem('EDL_S8_PLAYERS')) || defaultPlayers;
+        let matches = JSON.parse(localStorage.getItem('EDL_S8_MATCHES')) || defaultMatches;
+        let isAdminAuthenticated = sessionStorage.getItem('EDL_S8_AUTH') === 'true';
+        let isAdminEditingEnabled = JSON.parse(localStorage.getItem('EDL_S8_ADMIN_MODE')) || false;
 
         function calculateStandings() {
             let stats = {};
@@ -362,10 +371,7 @@
         function toggleAdminModal() {
             const modal = document.getElementById('adminModal');
             modal.classList.toggle('hidden');
-
-            if (!modal.classList.contains('hidden')) {
-                updateAdminModalUI();
-            }
+            if (!modal.classList.contains('hidden')) updateAdminModalUI();
         }
 
         function updateAdminModalUI() {
@@ -438,7 +444,6 @@
         function exportUpdatedHTML() {
             if (!isAdminAuthenticated) return;
 
-            // Reset UI visibility elements to default hidden before capturing file
             document.getElementById('adminModal').classList.add('hidden');
             document.getElementById('adminLoginForm').classList.remove('hidden');
             document.getElementById('adminControlsDashboard').classList.add('hidden');
@@ -446,19 +451,23 @@
 
             let fileData = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 
+            const newVersion = Date.now();
             const playersFormatted = JSON.stringify(players, null, 4);
             const matchesFormatted = JSON.stringify(matches, null, 4);
 
+            fileData = fileData.replace(
+                /const DATA_VERSION = \d+;/,
+                `const DATA_VERSION = ${newVersion};`
+            );
             fileData = fileData.replace(
                 /const defaultPlayers = .*?;/s,
                 `const defaultPlayers = ${playersFormatted};`
             );
             fileData = fileData.replace(
-                /let matches = JSON\.parse\(localStorage\.getItem\('EDL_S8_MATCHES'\)\) \|\| generateRoundRobin\(players\);/,
-                `let matches = ${matchesFormatted};`
+                /const defaultMatches = .*?;/s,
+                `const defaultMatches = ${matchesFormatted};`
             );
 
-            // Restore active state for current admin session
             document.getElementById('adminModal').classList.remove('hidden');
             updateAdminModalUI();
             if (isAdminAuthenticated) {
@@ -499,6 +508,7 @@
                 localStorage.removeItem('EDL_S8_PLAYERS');
                 localStorage.removeItem('EDL_S8_MATCHES');
                 localStorage.removeItem('EDL_S8_ADMIN_MODE');
+                localStorage.removeItem('EDL_S8_VERSION');
                 players = defaultPlayers;
                 matches = generateRoundRobin(players);
                 isAdminEditingEnabled = false;
